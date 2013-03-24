@@ -1,5 +1,8 @@
 #define _GNU_SOURCE
 #define PURPLE_PLUGINS
+
+#include "combineargs.h"
+
 #include <stdio.h>
 
 #include <plugin.h>
@@ -32,6 +35,7 @@
 
 static gboolean plugin_load(PurplePlugin *plugin);
 static gboolean plugin_unload(PurplePlugin *plugin);
+static GList* plugin_actions(PurplePlugin* plugin, gpointer context);
 
 static PurplePluginInfo info =
 {
@@ -71,10 +75,13 @@ typedef struct account_context_s {
   PurpleConvIm* nick_conv;
   PurpleConversation* nick_conv_thingy;
   guint nick_checker;
+  gboolean identified;
 } account_context;
 
 pcre* ask_for_register = NULL;
 pcre_extra* ask_for_register_study = NULL;
+pcre* was_identified = NULL;
+pcre_extra* was_identified_study = NULL;
 PurplePlugin* g_plugin = NULL;
 
 
@@ -91,55 +98,6 @@ account_context* find_context(PurpleAccount* account) {
   }
 
   return context;
-}
-
-static account_context* check_nick_conv(PurpleAccount* account) {
-  account_context* context = find_context(account);
-  if(!context->nick_conv_thingy) {
-    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
-    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
-    return context;
-  }
-  if(!context->nick_conv)
-    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
-  return context;
-}
-
-static char* vcombineargs(va_list args) {
-  const char* arg;
-  char* line = NULL;
-  ssize_t llen = 0, alen = 0;
-  while((arg = va_arg(args,const char*))) {
-    alen = strlen(arg);
-    if(llen == 0) {
-      // make sure there is one byte at the end for the null
-      line = malloc(alen+1);
-      memcpy(line,arg,alen);
-      llen = alen;
-    } else {
-      // make sure there is one byte at the end for the null
-      line = realloc(line,llen+alen+2);
-      line[llen] = ' ';
-      memcpy(line+llen+1,arg,alen);
-      llen += alen + 1;
-    }
-  }
-  if(line != NULL)
-    line[llen] = '\0';
-  return line;
-}
-
-static void tell_user(account_context* ctx,...) {
-  va_list args;
-  va_start(args,ctx);
-  char* message = vcombineargs(args);
-  va_end(args);
-  purple_conversation_write(ctx->nick_conv_thingy,
-			    "nickserv identifier",
-			    message,
-			    PURPLE_MESSAGE_SYSTEM,
-			    time(NULL));
-  g_free(message);
 }
 
 // why can't I go args = "nickserv" + args? x_x
@@ -160,15 +118,45 @@ static void tell_nickserv_c_sucks(account_context* ctx, PurpleAccount *account, 
     }
   } else {
     const char* message = line + 9;
-    fprintf(stderr,"Trying privmsg %s\n",message);
+    fprintf(stderr,"Trying privmsg %s %d\n",message,strlen(message));
     purple_conv_im_send_with_flags(ctx->nick_conv,
 				   message,
 				   PURPLE_MESSAGE_NO_LOG |
 				   PURPLE_MESSAGE_INVISIBLE |
 				   PURPLE_MESSAGE_AUTO_RESP);
   }
-  g_free(line);
+  free(line);
 }
+
+static void doIdentify(account_context* ctx, PurpleAccount* account, const char* password) {
+    tell_nickserv(ctx,account,"IDENTIFY",password,NULL);
+}
+
+static account_context* check_nick_conv(PurpleAccount* account) {
+  account_context* context = find_context(account);
+  if(!context->nick_conv_thingy) {
+    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
+    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
+    return context;
+  }
+  if(!context->nick_conv)
+    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
+  return context;
+}
+
+static void tell_user(account_context* ctx,...) {
+  va_list args;
+  va_start(args,ctx);
+  char* message = vcombineargs(args);
+  va_end(args);
+  purple_conversation_write(ctx->nick_conv_thingy,
+			    "nickserv identifier",
+			    message,
+			    PURPLE_MESSAGE_SYSTEM,
+			    time(NULL));
+  g_free(message);
+}
+
 
 static gboolean check_for_nickserv(PurpleAccount *account,
                                char **sender,
@@ -199,12 +187,24 @@ static gboolean check_for_nickserv(PurpleAccount *account,
   if(rc >= 0) {
     tell_user(ctx,"Identifying to nickserv as",
 	      purple_connection_get_display_name(purple_conversation_get_connection(conv)),NULL);
-    tell_nickserv(ctx,account,"IDENTIFY",password,NULL);
+    doIdentify(ctx,account,password);
     return TRUE;
-  } else {
-    //fprintf(stderr,"Message from ns %s\n",*message);
-    return FALSE;
   }
+  rc = pcre_exec(was_identified,
+          was_identified_study,
+          *message,
+          strlen(*message),
+          0,
+          0,
+          NULL,
+          0);
+  if(rc >= 0) {
+      ctx->identified = TRUE;
+      tell_user(ctx,"Successfully identified!",NULL);
+      return TRUE;
+  }
+  //fprintf(stderr,"Message from ns %s\n",*message);
+  return FALSE;
 }
 
 #define UP 0
@@ -284,6 +284,16 @@ static gboolean check_nick(gpointer udata) {
 
   if(!strcmp(purple_connection_get_display_name(connection),desiredNick)) {
     // we have teh right nick now yay
+    account_context* ctx = find_context(connection->account);
+    if(!ctx->identified) {
+        const char* password = purple_account_get_string(connection->account,
+						   PASSWORD,NULL);
+        if(!password) {
+            // how did I GET here?
+            return FALSE;
+        }
+        doIdentify(ctx,connection->account,password);
+    }
     check_blocked_channels(connection);
     return FALSE;
   }
@@ -301,6 +311,7 @@ static gboolean check_nick(gpointer udata) {
 	    ")",NULL);
   tell_nickserv(ctx,connection->account,"GHOST",desiredNick,password,NULL);
 
+  // then try to change your nickname.
   char* command = g_malloc(strlen(desiredNick)+6);
   ssize_t dlen = strlen(desiredNick);
   memcpy(command,"nick ",5);
@@ -354,8 +365,31 @@ static void signed_on(PurpleConnection *connection, void* conn_handle) {
                         g_plugin, PURPLE_CALLBACK(check_for_nickserv), NULL);
 
   account_context* ctx = find_context(connection->account);
+  ctx->identified = FALSE;
   ctx->nick_checker = g_timeout_add_seconds(3,(GSourceFunc)check_nick,connection);
 }
+
+static PurpleCmdRet doIdentify_cb(PurpleConversation *conv,
+        const gchar *cmd,
+        gchar **args,
+        gchar **error,
+        void *data) {
+    PurpleAccount* account = purple_conversation_get_account(conv);
+    account_context* ctx = find_context(account);
+    const char* password = purple_account_get_string(account,PASSWORD,NULL);
+    if(password==NULL) {
+        tell_user(ctx,"No nickserv password for this network!",NULL);
+        return PURPLE_CMD_RET_FAILED;
+    }
+    tell_user(ctx,"Identifying...",NULL);
+    doIdentify(ctx,account,password);
+}
+
+
+struct {
+    PurpleCmdId identify;
+} id = {};
+
 
 static gboolean plugin_load(PurplePlugin *plugin) {
   PurplePlugin *irc_prpl;
@@ -374,6 +408,18 @@ static gboolean plugin_load(PurplePlugin *plugin) {
   }
 
   ask_for_register_study = pcre_study(ask_for_register,0,&err);
+  if(err) {
+    fprintf(stderr,"Eh, study failed. %s\n",err);
+  }
+
+  was_identified = pcre_compile("Password accepted|You are now identified",0,
+				  &err,&erroffset,NULL);
+  if(!was_identified) {
+    fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
+    return FALSE;
+  }
+
+  was_identified_study = pcre_study(was_identified,0,&err);
   if(err) {
     fprintf(stderr,"Eh, study failed. %s\n",err);
   }
@@ -425,6 +471,17 @@ static gboolean plugin_load(PurplePlugin *plugin) {
       continue;
     signed_on(gc,conn_handle);
   }
+
+  id.identify = purple_cmd_register(
+          "identify",
+          "",
+          PURPLE_CMD_P_DEFAULT,
+          PURPLE_CMD_FLAG_IM | PURPLE_CMD_FLAG_CHAT | PURPLE_CMD_FLAG_PRPL_ONLY,
+          "prpl-irc",
+          doIdentify_cb,
+          "identifies you to the current network",
+          NULL);
+
   return TRUE;
 }
 
@@ -432,6 +489,9 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
 
   PurplePlugin* irc_plugin;
   PurplePluginProtocolInfo* prpl_info;
+
+  purple_cmd_unregister(id.identify);
+  id.identify = 0;
 
   GList* l;
   for (l = purple_accounts_get_all(); l != NULL; l = l->next) {
@@ -453,6 +513,14 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
     ask_for_register_study = NULL;
   }
 
+  if(was_identified) {
+    pcre_free(was_identified);
+    was_identified = NULL;
+  }
+  if(was_identified_study) {
+    pcre_free(was_identified_study);
+    was_identified_study = NULL;
+  }
   irc_plugin = purple_plugins_find_with_id(IRC_PLUGIN_ID);
   if(irc_plugin) {
     prpl_info = PURPLE_PLUGIN_PROTOCOL_INFO(irc_plugin);
@@ -487,8 +555,8 @@ static void plugin_init(PurplePlugin *plugin)
   bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
 #endif /* ENABLE_NLS */
 
-  info.name = _("nickserv");
-  info.summary = _("slightly less cheap nickserv hack");
+  info.name = _("Nickserv");
+  info.summary = _("slightly less cheap Nickserv hack");
   info.description = _("Auto-nick negotiation with nickserv.");
 }
 

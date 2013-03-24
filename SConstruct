@@ -11,8 +11,9 @@ env.ParseConfig('pkg-config glib-2.0 purple-3 --cflags --libs')
 
 objects = list()
 objects.append(env.SharedObject("main.c"))
+objects.append(env.SharedObject("combineargs.c"))
 
-lib = env.SharedLibrary("purple-i2p-nickserv",objects,SHLIBPREFIX="")
+lib = env.SharedLibrary("purple-nickserv",objects,SHLIBPREFIX="")
 
 userdir = env.Dir(os.path.expanduser('~') + '/.purple/plugins/')
 install = env.Install(userdir,lib)
