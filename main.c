@@ -102,15 +102,13 @@ account_context* find_context(PurpleAccount* account) {
   return context;
 }
 
-// why can't I go args = "nickserv" + args? x_x
+// why can't I go va_append("nickserv",args)? x_x
 
-#define tell_nickserv(ctx,account,args...) tell_nickserv_c_sucks(ctx,account,"nickserv",args)
+static void tell_nickserv(account_context* ctx, PurpleAccount *account, const char** args) {
 
-static void tell_nickserv_c_sucks(account_context* ctx, PurpleAccount *account, ...) {
-  va_list args;
-  va_start(args,account);
-  char* line = vcombineargs(args);
-  va_end(args);
+  gchar* var1434 = g_strjoinv(" ",(gchar**)args);
+  gchar* line = g_strconcat("nickserv ",var1434);
+  g_free(var1434);
   if(purple_account_get_bool(account,NICKSERV_USE_PRIVMSG,FALSE)==FALSE) {
     gchar* error = NULL;
     fprintf(stderr,"Trying command %s\n",line);
@@ -127,11 +125,15 @@ static void tell_nickserv_c_sucks(account_context* ctx, PurpleAccount *account, 
 				   PURPLE_MESSAGE_INVISIBLE |
 				   PURPLE_MESSAGE_AUTO_RESP);
   }
-  free(line);
+  g_free(line);
 }
 
 static void doIdentify(account_context* ctx, PurpleAccount* account, const char* password) {
-    tell_nickserv(ctx,account,"IDENTIFY",password,NULL);
+    const char* var1434[] = {
+        "IDENTIFY",
+        password,
+        NULL};
+    tell_nickserv(ctx,account,var1434);
 }
 
 static account_context* check_nick_conv(PurpleAccount* account) {
@@ -146,11 +148,8 @@ static account_context* check_nick_conv(PurpleAccount* account) {
   return context;
 }
 
-static void tell_user(account_context* ctx,...) {
-  va_list args;
-  va_start(args,ctx);
-  char* message = vcombineargs(args);
-  va_end(args);
+static void tell_user(account_context* ctx, const char** args) {
+  gchar* message = g_strjoinv(" ",(gchar**)args);
   purple_conversation_write(ctx->nick_conv_thingy,
 			    "nickserv identifier",
 			    message,
@@ -187,8 +186,11 @@ static gboolean check_for_nickserv(PurpleAccount *account,
 		     0);           /* number of elements in the output vector */
 
   if(rc >= 0) {
-    tell_user(ctx,"Identifying to nickserv as",
-	      purple_connection_get_display_name(purple_conversation_get_connection(conv)),NULL);
+    const char* var1434[] = {
+        "Identifying to nickserv as",
+	    purple_connection_get_display_name(purple_conversation_get_connection(conv)),
+        NULL};
+    tell_user(ctx,var1434);
     doIdentify(ctx,account,password);
     return TRUE;
   }
@@ -202,7 +204,10 @@ static gboolean check_for_nickserv(PurpleAccount *account,
           0);
   if(rc >= 0) {
       ctx->identified = TRUE;
-      tell_user(ctx,"Successfully identified!",NULL);
+      const char* var1434[] = {
+          "Successfully identified!",
+          NULL};
+      tell_user(ctx,var1434);
       return TRUE;
   }
   //fprintf(stderr,"Message from ns %s\n",*message);
@@ -308,17 +313,23 @@ static gboolean check_nick(gpointer udata) {
 
   g_assert(connection && connection->account);
   account_context* ctx = check_nick_conv(connection->account);
-  tell_user(ctx,"Ghosting",desiredNick,"so we can use it. (now at",
-	    purple_connection_get_display_name(connection),
-	    ")",NULL);
-  tell_nickserv(ctx,connection->account,"GHOST",desiredNick,password,NULL);
+  const char* var1434[] = {
+      "Ghosting",
+      desiredNick,
+      "so we can use it. (now at",
+      purple_connection_get_display_name(connection),
+      ")",
+      NULL};
+  tell_user(ctx,var1434);
+  const char* var1435[] = {
+      "GHOST",
+      desiredNick,
+      password,
+      NULL};
+  tell_nickserv(ctx,connection->account,var1435);
 
   // then try to change your nickname.
-  char* command = g_malloc(strlen(desiredNick)+6);
-  ssize_t dlen = strlen(desiredNick);
-  memcpy(command,"nick ",5);
-  memcpy(command+5,desiredNick,dlen);
-  command[5+dlen] = '\0';
+  gchar* command = g_strconcat("nick ",desiredNick);
   gchar* error = NULL;
   purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
   g_free(command);
@@ -380,10 +391,16 @@ static PurpleCmdRet doIdentify_cb(PurpleConversation *conv,
     account_context* ctx = find_context(account);
     const char* password = purple_account_get_string(account,PASSWORD,NULL);
     if(password==NULL) {
-        tell_user(ctx,"No nickserv password for this network!",NULL);
+        const char* var1434[] = {
+            "No nickserv password for this network!",
+            NULL};
+        tell_user(ctx,var1434);
         return PURPLE_CMD_RET_FAILED;
     }
-    tell_user(ctx,"Identifying...",NULL);
+    const char* var1434[] = {
+        "Identifying...",
+        NULL};
+    tell_user(ctx,var1434);
     doIdentify(ctx,account,password);
     return PURPLE_CMD_RET_OK;
 }
