@@ -19,6 +19,8 @@
 #include <pcre.h>
 #include <string.h>
 
+#include "compatability.h"
+
 #define _ gettext
 
 #define PLUGIN_STATIC_NAME "nickserv"
@@ -383,6 +385,7 @@ static PurpleCmdRet doIdentify_cb(PurpleConversation *conv,
     }
     tell_user(ctx,"Identifying...",NULL);
     doIdentify(ctx,account,password);
+    return PURPLE_CMD_RET_OK;
 }
 
 
