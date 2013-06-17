@@ -1,8 +1,6 @@
 #define _GNU_SOURCE
 #define PURPLE_PLUGINS
 
-#include "combineargs.h"
-
 #include <stdio.h>
 
 #include <plugin.h>
