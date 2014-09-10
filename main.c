@@ -6,11 +6,12 @@
 #include <plugin.h>
 #include <account.h>
 #include <accountopt.h>
-#include <blist.h>
+#include <buddylist.h>
 #include <connection.h>
 #include <conversation.h>
 #include <version.h>
 #include <cmds.h>
+#include <server.h>
 
 #include <libintl.h>
 
@@ -72,7 +73,7 @@ static PurplePluginInfo info =
 /* fucking globals how do cthey work */
 
 typedef struct account_context_s {
-  PurpleConvIm* nick_conv;
+  PurpleIMConversation* nick_conv;
   PurpleConversation* nick_conv_thingy;
   guint nick_checker;
   gboolean identified;
@@ -105,23 +106,25 @@ account_context* find_context(PurpleAccount* account) {
 static void tell_nickserv(account_context* ctx, PurpleAccount *account, const char** args) {
 
   gchar* var1434 = g_strjoinv(" ",(gchar**)args);
-  gchar* line = g_strconcat("nickserv ",var1434);
+  gchar* line = g_strconcat("nickserv ",var1434,NULL);
   g_free(var1434);
   if(purple_account_get_bool(account,NICKSERV_USE_PRIVMSG,FALSE)==FALSE) {
     gchar* error = NULL;
     fprintf(stderr,"Trying command %s\n",line);
-    if(PURPLE_CMD_STATUS_OK!=purple_cmd_do_command(ctx->nick_conv_thingy,
+    if(PURPLE_CMD_STATUS_OK!=purple_cmd_do_command(PURPLE_CONVERSATION(ctx->nick_conv),
 					    line,line,&error)) {
       fprintf(stderr,"Nickserv command failed %s",line);
     }
   } else {
     const char* message = line + 9;
     fprintf(stderr,"Trying privmsg %s %d\n",message,strlen(message));
-    purple_conv_im_send_with_flags(ctx->nick_conv,
+    purple_conversation_write_message(PURPLE_CONVERSATION(ctx->nick_conv),
+            purple_message_new_outgoing(
+                purple_account_get_string(account,NICKSERV_NAME,"NickServ"),
 				   message,
 				   PURPLE_MESSAGE_NO_LOG |
 				   PURPLE_MESSAGE_INVISIBLE |
-				   PURPLE_MESSAGE_AUTO_RESP);
+				   PURPLE_MESSAGE_AUTO_RESP));
   }
   g_free(line);
 }
@@ -136,23 +139,21 @@ static void doIdentify(account_context* ctx, PurpleAccount* account, const char*
 
 static account_context* check_nick_conv(PurpleAccount* account) {
   account_context* context = find_context(account);
-  if(!context->nick_conv_thingy) {
-    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
-    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
+  if(!context->nick_conv) {
+    context->nick_conv = purple_im_conversation_new(account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
     return context;
   }
-  if(!context->nick_conv)
-    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
   return context;
 }
 
 static void tell_user(account_context* ctx, const char** args) {
   gchar* message = g_strjoinv(" ",(gchar**)args);
-  purple_conversation_write(ctx->nick_conv_thingy,
+  purple_conversation_write_message(PURPLE_CONVERSATION(ctx->nick_conv),
+          purple_message_new_incoming(
 			    "nickserv identifier",
 			    message,
 			    PURPLE_MESSAGE_SYSTEM,
-			    time(NULL));
+			    time(NULL)));
   g_free(message);
 }
 
@@ -171,8 +172,8 @@ static gboolean check_for_nickserv(PurpleAccount *account,
 
   account_context* ctx = check_nick_conv(account);
   if(!conv) {
-    conv = ctx->nick_conv_thingy;
-  } else if(conv != ctx->nick_conv_thingy) return FALSE;
+    conv = PURPLE_CONVERSATION(ctx->nick_conv);
+  } else if(conv != PURPLE_CONVERSATION(ctx->nick_conv)) return FALSE;
 
   int rc = pcre_exec(ask_for_register,                   /* the compiled pattern */
 		     ask_for_register_study,             /* no extra data - we didn't study the pattern */
@@ -243,36 +244,36 @@ static void walk_blist(void (*handle)(PurpleBlistNode*)) {
 
 static void check_blocked_channels(PurpleConnection* connection) {
   void each_node(PurpleBlistNode* node) {
-    if(!PURPLE_BLIST_NODE_IS_CHAT(node)) return;
+    if(!PURPLE_IS_CHAT(node)) return;
     PurpleChat* chat = PURPLE_CHAT(node);
     PurpleAccount* test = purple_chat_get_account(chat);
     /*fprintf(stderr,"%s == %s ? %s\n",
 	    test->username,
-	    connection->account->username,
-	    test == connection->account ? "TRUE" : "FALSE");*/
-    if(test != connection->account) return;
+	    purple_connection_get_account(connection)->username,
+	    test == purple_connection_get_account(connection) ? "TRUE" : "FALSE");*/
+    if(test != purple_connection_get_account(connection)) return;
 
     gboolean autoJoin = purple_blist_node_get_bool(node,"gtk-autojoin");
     if(!autoJoin) return;
 
     // mostly ripped from pidgin/gtkblist.c gtk_blist_join_chat
 
-    PurplePluginProtocolInfo* prpl = PURPLE_PLUGIN_PROTOCOL_INFO(purple_find_prpl(purple_account_get_protocol_id(connection->account)));
+    PurplePluginProtocolInfo* prpl = PURPLE_PLUGIN_PROTOCOL_INFO(purple_find_prpl(purple_account_get_protocol_id(purple_connection_get_account(connection))));
     if(!(prpl && prpl->get_chat_name)) return;
     GHashTable* components = purple_chat_get_components(chat);
     gchar* name = prpl->get_chat_name(components);
     if(!name) return;
     // This creates the conversation if it is not already there.
     PurpleConversation* conv =
-      purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+      purple_conversations_find_with_account(
 					    name,
-					    connection->account);
+					    purple_connection_get_account(connection));
     g_free(name);
     if(conv) {
       // pidgin_conv_attach_conversation?
       purple_conversation_present(conv);
     }
-    serv_join_chat(connection,components);
+    purple_serv_join_chat(connection,components);
   }
 
   walk_blist(each_node);
@@ -282,35 +283,35 @@ static void check_blocked_channels(PurpleConnection* connection) {
 
 static gboolean check_nick(gpointer udata) {
   PurpleConnection* connection = (PurpleConnection*) udata;
-  const char* desiredNick = purple_account_get_string(connection->account,
+  const char* desiredNick = purple_account_get_string(purple_connection_get_account(connection),
 					       DESIRED_NICK,NULL);
 
   if(desiredNick==NULL || *desiredNick=='\0') return FALSE;
 
   if(!strcmp(purple_connection_get_display_name(connection),desiredNick)) {
     // we have teh right nick now yay
-    account_context* ctx = find_context(connection->account);
+    account_context* ctx = find_context(purple_connection_get_account(connection));
     if(!ctx->identified) {
-        const char* password = purple_account_get_string(connection->account,
+        const char* password = purple_account_get_string(purple_connection_get_account(connection),
 						   PASSWORD,NULL);
         if(!password) {
             // how did I GET here?
             return FALSE;
         }
-        doIdentify(ctx,connection->account,password);
+        doIdentify(ctx,purple_connection_get_account(connection),password);
     }
     check_blocked_channels(connection);
     return FALSE;
   }
 
-  g_assert(connection->account);
+  g_assert(purple_connection_get_account(connection));
 
-  const char* password = purple_account_get_string(connection->account,
+  const char* password = purple_account_get_string(purple_connection_get_account(connection),
 						   PASSWORD,NULL);
   if(password==NULL) return FALSE;
 
-  g_assert(connection && connection->account);
-  account_context* ctx = check_nick_conv(connection->account);
+  g_assert(connection && purple_connection_get_account(connection));
+  account_context* ctx = check_nick_conv(purple_connection_get_account(connection));
   const char* var1434[] = {
       "Ghosting",
       desiredNick,
@@ -324,12 +325,12 @@ static gboolean check_nick(gpointer udata) {
       desiredNick,
       password,
       NULL};
-  tell_nickserv(ctx,connection->account,var1435);
+  tell_nickserv(ctx,purple_connection_get_account(connection),var1435);
 
   // then try to change your nickname.
-  gchar* command = g_strconcat("nick ",desiredNick);
+  gchar* command = g_strconcat("nick ",desiredNick,NULL);
   gchar* error = NULL;
-  purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
+  purple_cmd_do_command(PURPLE_CONVERSATION(ctx->nick_conv),command,command,&error);
   g_free(command);
   if(error) {
     fprintf(stderr,"Umm got an error doing the nick %s\n",error);
@@ -341,20 +342,20 @@ static void free_context(account_context* ctx) {
   if(ctx->nick_checker)
     g_source_remove(ctx->nick_checker);
   /* This gets done automatically... seems to lead to a double free
-  if(ctx->nick_conv_thingy)
-    purple_conversation_destroy(ctx->nick_conv_thingy);
+  if(PURPLE_CONVERSATION(ctx->nick_conv))
+    purple_conversation_destroy(PURPLE_CONVERSATION(ctx->nick_conv));
   */
   g_free(ctx);
 }
 
 static void signed_off(PurpleConnection *connection) {
-  g_hash_table_remove(contexts,connection->account);
+  g_hash_table_remove(contexts,purple_connection_get_account(connection));
 }
 
 static void signed_on(PurpleConnection *connection, void* conn_handle) {
 
   PurpleAccount* account;
-  PurpleConvIm* imconv;
+  PurpleIMConversation* imconv;
 
   if(!connection) return;
   account = purple_connection_get_account(connection);
@@ -375,7 +376,7 @@ static void signed_on(PurpleConnection *connection, void* conn_handle) {
   purple_signal_connect(purple_conversations_get_handle(), "receiving-im-msg",
                         g_plugin, PURPLE_CALLBACK(check_for_nickserv), NULL);
 
-  account_context* ctx = find_context(connection->account);
+  account_context* ctx = find_context(purple_connection_get_account(connection));
   ctx->identified = FALSE;
   ctx->nick_checker = g_timeout_add_seconds(3,(GSourceFunc)check_nick,connection);
 }

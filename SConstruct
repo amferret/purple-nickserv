@@ -2,7 +2,7 @@
 
 import os
 
-os.environ['PKG_CONFIG_PATH']="/usr/local/lib/pkgconfig"
+#os.environ['PKG_CONFIG_PATH']="/usr/local/lib/pkgconfig"
 
 env = Environment(CCFLAGS="-g")
 env["ENV"]["PKG_CONFIG_PATH"] = os.environ.get("PKG_CONFIG_PATH")
