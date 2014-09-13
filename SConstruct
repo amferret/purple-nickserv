@@ -2,12 +2,12 @@
 
 import os
 
-os.environ['PKG_CONFIG_PATH']="/usr/local/lib/pkgconfig"
+os.environ['PKG_CONFIG_PATH']="/usr/opt/pidgin/lib/pkgconfig"
 
 env = Environment(CCFLAGS="-g")
 env["ENV"]["PKG_CONFIG_PATH"] = os.environ.get("PKG_CONFIG_PATH")
 
-env.ParseConfig('pkg-config glib-2.0 purple-3 --cflags --libs')
+env.ParseConfig('pkg-config glib-2.0 purple --cflags --libs')
 
 objects = list()
 objects.append(env.SharedObject("main.c"))
