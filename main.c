@@ -179,6 +179,15 @@ static void tell_user(account_context* ctx, const char** args) {
   g_free(message);
 }
 
+static void doGhost(account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
+  const char* var1435[] = {
+      recover ? "RECOVER" : "GHOST",
+      desiredNick,
+      password,
+      NULL};
+  tell_nickserv(ctx,account,var1435);
+}
+
 
 static gboolean check_for_nickserv(PurpleAccount *account,
                                char **sender,
@@ -304,15 +313,6 @@ static void setNick(account_context* ctx) {
   if(error) {
     fprintf(stderr,"Umm got an error doing the nick %s\n",error);
   }
-}
-
-void doGhost(account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
-  const char* var1435[] = {
-      recover ? "RECOVER" : "GHOST",
-      desiredNick,
-      password,
-      NULL};
-  tell_nickserv(ctx,account,var1435);
 }
 
 /* we have to do this on a timer since there are NO HOOKS AT ALL ARGH for when IRC reports a conflicting nickname. */
