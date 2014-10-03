@@ -411,8 +411,12 @@ static void signed_on(PurpleConnection *connection, void* conn_handle) {
   // always assign, in case settings changed.
   ctx->desiredNick = desiredNick;
 
-  ctx->identified = FALSE;
-  ctx->nick_checker = g_timeout_add_seconds(3,(GSourceFunc)check_nick,connection);
+  if(TRUE==check_nick(connection)) {
+    ctx->identified = FALSE;
+    ctx->nick_checker = g_timeout_add_seconds(10,(GSourceFunc)check_nick,connection);
+  } else {
+      ctx->nick_checker = 0;
+  }
 }
 
 static PurpleCmdRet doIdentify_cb(PurpleConversation *conv,
