@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 struct pat {
-    gboolean plain;
+    enum pat_mode mode;
 };
 
 struct pcre_pat {
@@ -25,12 +25,12 @@ struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
 
     if(mode == pat_plain || mode == pat_match) {
         struct plain_pat* self = g_new(struct plain_pat,1);
-        self->parent.plain = TRUE;
+        self->parent.mode = mode;
         self->caseless = (mode == pat_match) ? TRUE : FALSE;
         if(mode == pat_match) {
             self->caseless = TRUE;
             // needs freeing
-            self->substring = g_ascii_strdown(pattern,strlen(substring));
+            self->substring = g_ascii_strdown(pattern,g_strlen(pattern));
         } else {
             self->caseless = FALSE;
             self->substring = pattern; // assuming this is a string literal
@@ -38,7 +38,7 @@ struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
         return (struct pat*)self;
     } else {
         struct pcre_pat* self = g_new(struct pcre_pat,1);
-        self->parent.plain = FALSE;
+        self->parent.mode = mode;
         self->pat = pcre_compile(pattern,0,
                 &err,&erroffset,NULL);
         if(!self->pat) {
@@ -58,10 +58,10 @@ void pat_cleanup(struct pat** self) {
     struct pat* doomed = *self;
     *self = NULL;
 
-    if(doomed->plain == TRUE) {
+    if(doomed->mode == pat_plain || doomed->mode == pat_match) {
         struct plain_pat* cdoom = (struct plain_pat*) doomed;
         if(cdoom->caseless)
-            g_free(cdoom->substring);
+            g_free((char*)cdoom->substring);
     } else {
         struct pcre_pat* pdoom = (struct pcre_pat*) doomed;
         if(pdoom->pat) 
