@@ -30,7 +30,7 @@ struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
         if(mode == pat_match) {
             self->caseless = TRUE;
             // needs freeing
-            self->substring = g_ascii_strdown(pattern,g_strlen(pattern));
+            self->substring = g_ascii_strdown(pattern,strlen(pattern));
         } else {
             self->caseless = FALSE;
             self->substring = pattern; // assuming this is a string literal
@@ -76,18 +76,19 @@ void pat_cleanup(struct pat** self) {
 gboolean pat_check(struct pat* parent, const char* test) {
     if(parent->mode == pat_plain || parent->mode == pat_match) {
         struct plain_pat* self = (struct plain_pat*) parent;
+        gsize testlen = strlen(test);
         if(self->caseless==TRUE) 
-            test = g_ascii_strdown(test);
-        gboolean ret = g_strstr_len(test,g_strlen(test),self->substring) == NULL ? FALSE : TRUE;
+            test = g_ascii_strdown(test,testlen);
+        gboolean ret = g_strstr_len(test,testlen,self->substring) == NULL ? FALSE : TRUE;
         if(self->caseless==TRUE)
-            g_free(test);
+            g_free((char*)test);
         return ret;
     }
     struct pcre_pat* self = (struct pcre_pat*) parent;
     int rc = pcre_exec(self->pat,                   /* the compiled pattern */
             self->study,             /* no extra data - we didn't study the pattern */
-		     *test,              /* the subject string */
-		     g_strlen(*test),       /* the length of the subject */
+		     test,              /* the subject string */
+		     strlen(test),       /* the length of the subject */
 		     0,                    /* start at offset 0 in the subject */
 		     0,                    /* default options */
 		     NULL,              /* output vector for substring information */
