@@ -14,10 +14,11 @@
 
 #include <libintl.h>
 
-#include <pcre.h>
 #include <string.h>
 
 #include "compatability.h"
+
+#include "pat.h"
 
 #define _ gettext
 
@@ -32,6 +33,19 @@
 #define NICKSERV_NAME PLUGIN_ID ".nickserv"
 #define NICKSERV_USE_PRIVMSG PLUGIN_ID ".privmsg"
 #define PASSWORD PLUGIN_ID ".password"
+
+struct pats {
+    pat ask_for_register;
+    pat was_identified;
+    pat use_recover;
+    pat was_ghosted;
+    pat was_recovered;
+} g_pats = {};
+
+static void pats_setup(void) {
+}
+static void pats_cleanup(void) {
+}
 
 static gboolean plugin_load(PurplePlugin *plugin);
 static gboolean plugin_unload(PurplePlugin *plugin);
@@ -78,12 +92,6 @@ typedef struct account_context_s {
   guint nick_checker;
   gboolean identified;
 } account_context;
-
-struct pat {
-    pcre* pat;
-    pcre_extra* study;
-};
-
 
 PurplePlugin* g_plugin = NULL;
 
