@@ -361,7 +361,7 @@ static gboolean check_nick(gpointer udata) {
       ")",
       NULL};
   tell_user(ctx,var1434);
-  doGhost(ctx,connection->account,password,false);
+  doGhost(ctx,connection->account,password,FALSE);
   return TRUE;
 }
 
@@ -395,8 +395,8 @@ static void signed_on(PurpleConnection *connection, void* conn_handle) {
   }
 
   // make sure we should do anything at all.
-  ctx->desiredNick = purple_account_get_string(account,DESIRED_NICK,NULL);
-  if(!ctx->desiredNick || *ctx->desiredNick=='\0') return;
+  const char* desiredNick = purple_account_get_string(account,DESIRED_NICK,NULL);
+  if(!desiredNick || *desiredNick=='\0') return;
 
   const char* password = purple_account_get_string(account,PASSWORD,NULL);
   if(!password) return;
@@ -405,6 +405,9 @@ static void signed_on(PurpleConnection *connection, void* conn_handle) {
                         g_plugin, PURPLE_CALLBACK(check_for_nickserv), NULL);
 
   account_context* ctx = find_context(connection->account);
+  // always assign, in case settings changed.
+  ctx->desiredNick = desiredNick;
+
   ctx->identified = FALSE;
   ctx->nick_checker = g_timeout_add_seconds(3,(GSourceFunc)check_nick,connection);
 }
