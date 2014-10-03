@@ -38,25 +38,23 @@ struct pats {
     struct pat* ask_for_register;
     struct pat* was_identified;
     struct pat* use_recover;
-    struct pat* was_ghosted;
-    struct pat* was_recovered;
+    struct pat* was_killed;
+    struct pat* unused;
 } g_pats = {};
 
 static void pats_setup(void) {
   g_pats.ask_for_register = pat_setup("nickname is registered",pat_match);
   g_pats.was_identified = pat_setup("Password accepted|You are now identified",pat_pcre);
   g_pats.use_recover = pat_setup("Instead, use the RECOVER command",pat_plain);
-  g_pats.was_ghosted = NULL; // TODO: this
-  g_pats.was_recovered = NULL; // TODO: this
+  g_pats.was_killed = pat_setup("has been killed",pat_plain);
+  g_pats.unused = pat_setup("isn't currently in use",pat_plain);
 }
 static void pats_cleanup(void) {
   pat_cleanup(&g_pats.ask_for_register);
   pat_cleanup(&g_pats.was_identified);
   pat_cleanup(&g_pats.use_recover);
-  /* TODO: these
-  pat_cleanup(&g_pats.was_ghosted);
-  pat_cleanup(&g_pats.was_recovered);
-  */
+  pat_cleanup(&g_pats.was_killed);
+  pat_cleanup(&g_pats.unused);
 }
 
 static gboolean plugin_load(PurplePlugin *plugin);
@@ -233,6 +231,11 @@ static gboolean check_for_nickserv(PurpleAccount *account,
       doGhost(ctx,account,password,TRUE);
       return TRUE;
   }
+
+  if(pat_check(g_pats.was_killed,*message) || pat_check(g_pats.unused,*message)) {
+      setNick(ctx);
+  }
+
   // TODO: ghost, recover response
   //fprintf(stderr,"Message from ns %s\n",*message);
   return FALSE;

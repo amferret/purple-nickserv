@@ -2,6 +2,7 @@
 
 #include <glib.h>
 #include <stdio.h>
+#include <string.h>
 
 struct pat {
     enum pat_mode mode;
