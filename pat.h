@@ -1,4 +1,5 @@
 #include <pcre.h>
+#include <glib.h>
 
 struct pat {
     pcre* pat;
