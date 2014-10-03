@@ -1,8 +1,11 @@
 #include "pat.h"
 
+#include <glib.h>
+#include <stdio.h>
+
 struct pat {
     gboolean plain;
-}
+};
 
 struct pcre_pat {
     struct pat parent; 
@@ -16,13 +19,16 @@ struct plain_pat {
 };
 
 struct pat* pat_setup(const char* pattern, gboolean plain) {
+    const char* err = NULL;
+    int erroffset = 0;
+
     if(plain==TRUE) {
-        struct plain_pat* self = G_NEW(struct plain_pat);
+        struct plain_pat* self = g_new(struct plain_pat,1);
         self->parent.plain = TRUE;
         self->substring = pattern; // assuming this is a string literal
-        return self
+        return (struct pat*)self;
     } else {
-        struct pcre_pat* self = G_NEW(struct pcre_pat);
+        struct pcre_pat* self = g_new(struct pcre_pat,1);
         self->parent.plain = FALSE;
         self->pat = pcre_compile(pattern,0,
                 &err,&erroffset,NULL);
@@ -35,7 +41,7 @@ struct pat* pat_setup(const char* pattern, gboolean plain) {
         if(err) {
             fprintf(stderr,"Eh, study failed. %s\n",err);
         }
-        return self
+        return (struct pat*)self;
     }
 }
 

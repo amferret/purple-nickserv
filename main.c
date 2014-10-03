@@ -448,9 +448,6 @@ static gboolean plugin_load(PurplePlugin *plugin) {
 
   irc_prpl = purple_plugins_find_with_id(IRC_PLUGIN_ID);
 
-  const char* err = NULL;
-  int erroffset = 0;
-
   pats_setup();
 
   if (NULL == irc_prpl)
