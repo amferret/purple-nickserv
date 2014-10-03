@@ -186,6 +186,17 @@ static void doGhost(account_context* ctx, PurpleAccount* account, const char* pa
   tell_nickserv(ctx,account,var1435);
 }
 
+static void setNick(account_context* ctx) {
+  // then try to change your nickname.
+  gchar* command = g_strconcat("nick ",ctx->desiredNick,NULL);
+  gchar* error = NULL;
+  purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
+  g_free(command);
+  if(error) {
+    fprintf(stderr,"Umm got an error doing the nick %s\n",error);
+  }
+}
+
 
 static gboolean check_for_nickserv(PurpleAccount *account,
                                char **sender,
@@ -236,7 +247,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
       setNick(ctx);
   }
 
-  // TODO: ghost, recover response
+  // TODO: ghost response
   //fprintf(stderr,"Message from ns %s\n",*message);
   return FALSE;
 }
@@ -305,17 +316,6 @@ static void check_blocked_channels(PurpleConnection* connection) {
   }
 
   walk_blist(each_node);
-}
-
-static void setNick(account_context* ctx) {
-  // then try to change your nickname.
-  gchar* command = g_strconcat("nick ",ctx->desiredNick,NULL);
-  gchar* error = NULL;
-  purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
-  g_free(command);
-  if(error) {
-    fprintf(stderr,"Umm got an error doing the nick %s\n",error);
-  }
 }
 
 /* we have to do this on a timer since there are NO HOOKS AT ALL ARGH for when IRC reports a conflicting nickname. */
