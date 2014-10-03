@@ -59,7 +59,12 @@ void pat_cleanup(struct pat** self) {
     free(doomed);
 }
 
-gboolean pat_check(struct pat* self, const char* test) {
+gboolean pat_check(struct pat* parent, const char* test) {
+    if(parent->plain==TRUE) {
+        struct plain_pat* self = parent;
+        return strstr(test,self->substring) == NULL ? FALSE : TRUE;
+    }
+    struct pcre_pat* self = parent;
     int rc = pcre_exec(self->pat,                   /* the compiled pattern */
             self->study,             /* no extra data - we didn't study the pattern */
 		     *test,              /* the subject string */

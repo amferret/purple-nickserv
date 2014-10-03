@@ -440,40 +440,10 @@ static gboolean plugin_load(PurplePlugin *plugin) {
 
   const char* err = NULL;
   int erroffset = 0;
-  g_pats.ask_for_register.pat = pcre_compile("nickname is registered",0,
-				  &err,&erroffset,NULL);
-  if(!g_pats.ask_for_register.pat) {
-    fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
-    return FALSE;
-  }
+  g_pats.ask_for_register = pat_setup("nickname is registered",TRUE);
+  g_pats.was_identified = pat_setup("Password accepted|You are now identified",FALSE);
+  g_pats.use_recover_instead = pat_setup("Instead, use the RECOVER command",TRUE);
 
-  g_pats.ask_for_register.study = pcre_study(g_pats.ask_for_register.pat,0,&err);
-  if(err) {
-    fprintf(stderr,"Eh, study failed. %s\n",err);
-  }
-
-  g_pats.was_identified.pat = pcre_compile("Password accepted|You are now identified",0,
-				  &err,&erroffset,NULL);
-  if(!g_pats.was_identified.pat) {
-    fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
-    return FALSE;
-  }
-
-  use_recover_instead = pcre_compile("Instead, use the RECOVER command",0,
-                      &err,&erroffset,NULL);
-  if(!use_recover_instead) {
-    fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
-    return FALSE;
-  }
-  g_pats.was_identified.study = pcre_study(g_pats.was_identified.pat,0,&err);
-  if(err) {
-    fprintf(stderr,"Eh, study failed. %s\n",err);
-  }
-
-  use_recover_instead_study = pcre_study(g_pats.use_recover.pat,0,&err);
-  if(err) {
-    fprintf(stderr,"Eh, study failed. %s\n",err);
-  }
   if (NULL == irc_prpl)
     return FALSE;
 
