@@ -6,7 +6,7 @@ struct pat {
     pcre_extra* study;
 };
 
-void pat_setup(struct pat*, const char* pattern);
+gboolean pat_setup(struct pat*, const char* pattern);
 void pat_cleanup(struct pat*);
 
 gboolean pat_check(struct pat*, const char* test);

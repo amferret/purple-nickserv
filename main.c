@@ -185,16 +185,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
     conv = ctx->nick_conv_thingy;
   } else if(conv != ctx->nick_conv_thingy) return FALSE;
 
-  int rc = pcre_exec(g_pats.ask_for_register.pat,                   /* the compiled pattern */
-		     g_pats.ask_for_register.study,             /* no extra data - we didn't study the pattern */
-		     *message,              /* the subject string */
-		     strlen(*message),       /* the length of the subject */
-		     0,                    /* start at offset 0 in the subject */
-		     0,                    /* default options */
-		     NULL,              /* output vector for substring information */
-		     0);           /* number of elements in the output vector */
-
-  if(rc >= 0) {
+  if(pat_check(&g_pats.ask_for_register,message)) {
     const char* var1434[] = {
         "Identifying to nickserv as",
 	    purple_connection_get_display_name(purple_conversation_get_connection(conv)),
@@ -203,15 +194,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
     doIdentify(ctx,account,password);
     return TRUE;
   }
-  rc = pcre_exec(g_pats.was_identified.pat,
-          g_pats.was_identified.study,
-          *message,
-          strlen(*message),
-          0,
-          0,
-          NULL,
-          0);
-  if(rc >= 0) {
+  if(pat_check(&g_pats.was_identified,message)) {
       ctx->identified = TRUE;
       const char* var1434[] = {
           "Successfully identified!",
@@ -220,15 +203,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
       return TRUE;
   }
 
-  rc = pcre_exec(g_pats.use_recover.pat,
-          g_pats.use_recover.study,
-          *message,
-          strlen(*message),
-          0,
-          0,
-          NULL,
-          0);
-  if(rc >= 0) {
+  if(pat_check(&g_pats.use_recover,message)) {
       const char* csux[] = {
           "Oops, we need to RECOVER instead.",
           NULL
