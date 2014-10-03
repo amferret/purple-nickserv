@@ -82,6 +82,8 @@ pcre* ask_for_register = NULL;
 pcre_extra* ask_for_register_study = NULL;
 pcre* was_identified = NULL;
 pcre_extra* was_identified_study = NULL;
+pcre* use_recover = NULL;
+pcre_extra* use_recover_study = NULL;
 PurplePlugin* g_plugin = NULL;
 
 
@@ -105,7 +107,7 @@ account_context* find_context(PurpleAccount* account) {
 static void tell_nickserv(account_context* ctx, PurpleAccount *account, const char** args) {
 
   gchar* var1434 = g_strjoinv(" ",(gchar**)args);
-  gchar* line = g_strconcat("nickserv ",var1434);
+  gchar* line = g_strconcat("nickserv ",var1434,NULL);
   g_free(var1434);
   if(purple_account_get_bool(account,NICKSERV_USE_PRIVMSG,FALSE)==FALSE) {
     gchar* error = NULL;
@@ -208,6 +210,34 @@ static gboolean check_for_nickserv(PurpleAccount *account,
       tell_user(ctx,var1434);
       return TRUE;
   }
+
+  rc = pcre_exec(use_recover,
+          use_recover_study,
+          *message,
+          strlen(*message),
+          0,
+          0,
+          NULL,
+          0);
+  if(rc >= 0) {
+      const char* csux[] = {
+          "Oops, we need to RECOVER instead.",
+          NULL
+      };
+      tell_user(ctx,csux);
+      const char* desiredNick = purple_account_get_string(connection->account,
+					       DESIRED_NICK,NULL);
+      if(desiredNick == NULL) {
+          const char* derp[] = {
+              "Uh, no desired nick? How did we ghost then?",
+              NULL
+          };
+          tell_user(ctx,derp);
+          return TRUE;
+      }
+      doGhost(ctx,account,desiredNick,password);
+      return TRUE;
+  }
   //fprintf(stderr,"Message from ns %s\n",*message);
   return FALSE;
 }
@@ -278,6 +308,16 @@ static void check_blocked_channels(PurpleConnection* connection) {
   walk_blist(each_node);
 }
 
+void doGhost(struct account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
+  const char* var1435[] = {
+      recover ? "RECOVER" : "GHOST",
+      desiredNick,
+      password,
+      NULL};
+  tell_nickserv(ctx,account,var1435);
+}
+
+
 /* we have to do this on a timer since there are NO HOOKS AT ALL ARGH for when IRC reports a conflicting nickname. */
 
 static gboolean check_nick(gpointer udata) {
@@ -319,15 +359,10 @@ static gboolean check_nick(gpointer udata) {
       ")",
       NULL};
   tell_user(ctx,var1434);
-  const char* var1435[] = {
-      "GHOST",
-      desiredNick,
-      password,
-      NULL};
-  tell_nickserv(ctx,connection->account,var1435);
+  doGhost(ctx,connection->account,desiredNick,password,false);
 
   // then try to change your nickname.
-  gchar* command = g_strconcat("nick ",desiredNick);
+  gchar* command = g_strconcat("nick ",desiredNick,NULL);
   gchar* error = NULL;
   purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
   g_free(command);
@@ -437,11 +472,21 @@ static gboolean plugin_load(PurplePlugin *plugin) {
     return FALSE;
   }
 
+  use_recover_instead = pcre_compile("Instead, use the RECOVER command",0,
+                      &err,&erroffset,NULL);
+  if(!use_recover_instead) {
+    fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
+    return FALSE;
+  }
   was_identified_study = pcre_study(was_identified,0,&err);
   if(err) {
     fprintf(stderr,"Eh, study failed. %s\n",err);
   }
 
+  use_recover_instead_study = pcre_study(use_recover,0,&err);
+  if(err) {
+    fprintf(stderr,"Eh, study failed. %s\n",err);
+  }
   if (NULL == irc_prpl)
     return FALSE;
 
@@ -538,6 +583,14 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
   if(was_identified_study) {
     pcre_free(was_identified_study);
     was_identified_study = NULL;
+  }
+  if(use_recover) {
+    pcre_free(use_recover);
+    use_recover = NULL;
+  }
+  if(use_recover_study) {
+    pcre_free(use_recover_study);
+    use_recover_study = NULL;
   }
   irc_plugin = purple_plugins_find_with_id(IRC_PLUGIN_ID);
   if(irc_plugin) {
