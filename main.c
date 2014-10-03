@@ -197,7 +197,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
     conv = ctx->nick_conv_thingy;
   } else if(conv != ctx->nick_conv_thingy) return FALSE;
 
-  if(pat_check(g_pats.ask_for_register,message)) {
+  if(pat_check(g_pats.ask_for_register,*message)) {
     const char* var1434[] = {
         "Identifying to nickserv as",
 	    purple_connection_get_display_name(purple_conversation_get_connection(conv)),
@@ -206,7 +206,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
     doIdentify(ctx,account,password);
     return TRUE;
   }
-  if(pat_check(g_pats.was_identified,message)) {
+  if(pat_check(g_pats.was_identified,*message)) {
       ctx->identified = TRUE;
       const char* var1434[] = {
           "Successfully identified!",
@@ -215,7 +215,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
       return TRUE;
   }
 
-  if(pat_check(g_pats.use_recover,message)) {
+  if(pat_check(g_pats.use_recover,*message)) {
       const char* csux[] = {
           "Oops, we need to RECOVER instead.",
           NULL
@@ -306,7 +306,7 @@ static void setNick(account_context* ctx) {
   }
 }
 
-void doGhost(struct account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
+void doGhost(account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
   const char* var1435[] = {
       recover ? "RECOVER" : "GHOST",
       desiredNick,
