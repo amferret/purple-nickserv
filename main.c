@@ -179,10 +179,10 @@ static void tell_user(account_context* ctx, const char** args) {
   g_free(message);
 }
 
-static void doGhost(account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
+static void doGhost(account_context* ctx, PurpleAccount* account, const char* password, gboolean recover) {
   const char* var1435[] = {
       recover ? "RECOVER" : "GHOST",
-      desiredNick,
+      ctx->desiredNick,
       password,
       NULL};
   tell_nickserv(ctx,account,var1435);
@@ -230,7 +230,7 @@ static gboolean check_for_nickserv(PurpleAccount *account,
           NULL
       };
       tell_user(ctx,csux);
-      doGhost(ctx,account,password);
+      doGhost(ctx,account,password,TRUE);
       return TRUE;
   }
   // TODO: ghost, recover response
@@ -320,13 +320,15 @@ static void setNick(account_context* ctx) {
 static gboolean check_nick(gpointer udata) {
   PurpleConnection* connection = (PurpleConnection*) udata;
 
+  account_context* ctx = find_context(connection->account);
+
   // always assign, in case settings changed.
   ctx->desiredNick = purple_account_get_string(connection->account,
 					       DESIRED_NICK,NULL);
 
-  if(desiredNick==NULL || *desiredNick=='\0') return FALSE;
+  if(ctx->desiredNick==NULL || *ctx->desiredNick=='\0') return FALSE;
 
-  if(!strcmp(purple_connection_get_display_name(connection),desiredNick)) {
+  if(!strcmp(purple_connection_get_display_name(connection),ctx->desiredNick)) {
     // we have teh right nick now yay
     account_context* ctx = find_context(connection->account);
     if(!ctx->identified) {
