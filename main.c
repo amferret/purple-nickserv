@@ -53,8 +53,10 @@ static void pats_cleanup(void) {
   pat_cleanup(&g_pats.ask_for_register);
   pat_cleanup(&g_pats.was_identified);
   pat_cleanup(&g_pats.use_recover_instead);
+  /* TODO: these
   pat_cleanup(&g_pats.was_ghosted);
   pat_cleanup(&g_pats.was_recovered);
+  */
 }
 
 static gboolean plugin_load(PurplePlugin *plugin);
@@ -219,19 +221,10 @@ static gboolean check_for_nickserv(PurpleAccount *account,
           NULL
       };
       tell_user(ctx,csux);
-      const char* desiredNick = purple_account_get_string(connection->account,
-					       DESIRED_NICK,NULL);
-      if(desiredNick == NULL) {
-          const char* derp[] = {
-              "Uh, no desired nick? How did we ghost then?",
-              NULL
-          };
-          tell_user(ctx,derp);
-          return TRUE;
-      }
-      doGhost(ctx,account,desiredNick,password);
+      doGhost(ctx,account,password);
       return TRUE;
   }
+  // TODO: ghost, recover response
   //fprintf(stderr,"Message from ns %s\n",*message);
   return FALSE;
 }
@@ -365,7 +358,7 @@ static gboolean check_nick(gpointer udata) {
       ")",
       NULL};
   tell_user(ctx,var1434);
-  doGhost(ctx,connection->account,desiredNick,password,false);
+  doGhost(ctx,connection->account,password,false);
   return TRUE;
 }
 
@@ -398,9 +391,10 @@ static void signed_on(PurpleConnection *connection, void* conn_handle) {
     return;
   }
 
-  const char* desiredNick = purple_account_get_string(account,DESIRED_NICK,NULL);
+  // make sure we should do anything at all.
+  ctx->desiredNick = purple_account_get_string(account,DESIRED_NICK,NULL);
+  if(!ctx->desiredNick || *ctx->desiredNick=='\0') return;
 
-  if(!desiredNick || *desiredNick=='\0') return;
   const char* password = purple_account_get_string(account,PASSWORD,NULL);
   if(!password) return;
 
