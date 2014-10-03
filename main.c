@@ -72,18 +72,19 @@ static PurplePluginInfo info =
 /* fucking globals how do cthey work */
 
 typedef struct account_context_s {
+  const char* desiredNick;
   PurpleConvIm* nick_conv;
   PurpleConversation* nick_conv_thingy;
   guint nick_checker;
   gboolean identified;
 } account_context;
 
-pcre* ask_for_register = NULL;
-pcre_extra* ask_for_register_study = NULL;
-pcre* was_identified = NULL;
-pcre_extra* was_identified_study = NULL;
-pcre* use_recover = NULL;
-pcre_extra* use_recover_study = NULL;
+struct pat {
+    pcre* pat;
+    pcre_extra* study;
+};
+
+
 PurplePlugin* g_plugin = NULL;
 
 
@@ -176,8 +177,8 @@ static gboolean check_for_nickserv(PurpleAccount *account,
     conv = ctx->nick_conv_thingy;
   } else if(conv != ctx->nick_conv_thingy) return FALSE;
 
-  int rc = pcre_exec(ask_for_register,                   /* the compiled pattern */
-		     ask_for_register_study,             /* no extra data - we didn't study the pattern */
+  int rc = pcre_exec(g_pats.ask_for_register.pat,                   /* the compiled pattern */
+		     g_pats.ask_for_register.study,             /* no extra data - we didn't study the pattern */
 		     *message,              /* the subject string */
 		     strlen(*message),       /* the length of the subject */
 		     0,                    /* start at offset 0 in the subject */
@@ -194,8 +195,8 @@ static gboolean check_for_nickserv(PurpleAccount *account,
     doIdentify(ctx,account,password);
     return TRUE;
   }
-  rc = pcre_exec(was_identified,
-          was_identified_study,
+  rc = pcre_exec(g_pats.was_identified.pat,
+          g_pats.was_identified.study,
           *message,
           strlen(*message),
           0,
@@ -211,8 +212,8 @@ static gboolean check_for_nickserv(PurpleAccount *account,
       return TRUE;
   }
 
-  rc = pcre_exec(use_recover,
-          use_recover_study,
+  rc = pcre_exec(g_pats.use_recover.pat,
+          g_pats.use_recover.study,
           *message,
           strlen(*message),
           0,
@@ -308,6 +309,17 @@ static void check_blocked_channels(PurpleConnection* connection) {
   walk_blist(each_node);
 }
 
+static void setNick(account_context* ctx) {
+  // then try to change your nickname.
+  gchar* command = g_strconcat("nick ",ctx->desiredNick,NULL);
+  gchar* error = NULL;
+  purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
+  g_free(command);
+  if(error) {
+    fprintf(stderr,"Umm got an error doing the nick %s\n",error);
+  }
+}
+
 void doGhost(struct account_context* ctx, PurpleAccount* account, const char* desiredNick, const char* password, gboolean recover) {
   const char* var1435[] = {
       recover ? "RECOVER" : "GHOST",
@@ -317,12 +329,13 @@ void doGhost(struct account_context* ctx, PurpleAccount* account, const char* de
   tell_nickserv(ctx,account,var1435);
 }
 
-
 /* we have to do this on a timer since there are NO HOOKS AT ALL ARGH for when IRC reports a conflicting nickname. */
 
 static gboolean check_nick(gpointer udata) {
   PurpleConnection* connection = (PurpleConnection*) udata;
-  const char* desiredNick = purple_account_get_string(connection->account,
+
+  // always assign, in case settings changed.
+  ctx->desiredNick = purple_account_get_string(connection->account,
 					       DESIRED_NICK,NULL);
 
   if(desiredNick==NULL || *desiredNick=='\0') return FALSE;
@@ -360,15 +373,6 @@ static gboolean check_nick(gpointer udata) {
       NULL};
   tell_user(ctx,var1434);
   doGhost(ctx,connection->account,desiredNick,password,false);
-
-  // then try to change your nickname.
-  gchar* command = g_strconcat("nick ",desiredNick,NULL);
-  gchar* error = NULL;
-  purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
-  g_free(command);
-  if(error) {
-    fprintf(stderr,"Umm got an error doing the nick %s\n",error);
-  }
   return TRUE;
 }
 
@@ -453,21 +457,21 @@ static gboolean plugin_load(PurplePlugin *plugin) {
 
   const char* err = NULL;
   int erroffset = 0;
-  ask_for_register = pcre_compile("nickname is registered",0,
+  g_pats.ask_for_register.pat = pcre_compile("nickname is registered",0,
 				  &err,&erroffset,NULL);
-  if(!ask_for_register) {
+  if(!g_pats.ask_for_register.pat) {
     fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
     return FALSE;
   }
 
-  ask_for_register_study = pcre_study(ask_for_register,0,&err);
+  g_pats.ask_for_register.study = pcre_study(g_pats.ask_for_register.pat,0,&err);
   if(err) {
     fprintf(stderr,"Eh, study failed. %s\n",err);
   }
 
-  was_identified = pcre_compile("Password accepted|You are now identified",0,
+  g_pats.was_identified.pat = pcre_compile("Password accepted|You are now identified",0,
 				  &err,&erroffset,NULL);
-  if(!was_identified) {
+  if(!g_pats.was_identified.pat) {
     fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
     return FALSE;
   }
@@ -478,12 +482,12 @@ static gboolean plugin_load(PurplePlugin *plugin) {
     fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
     return FALSE;
   }
-  was_identified_study = pcre_study(was_identified,0,&err);
+  g_pats.was_identified.study = pcre_study(g_pats.was_identified.pat,0,&err);
   if(err) {
     fprintf(stderr,"Eh, study failed. %s\n",err);
   }
 
-  use_recover_instead_study = pcre_study(use_recover,0,&err);
+  use_recover_instead_study = pcre_study(g_pats.use_recover.pat,0,&err);
   if(err) {
     fprintf(stderr,"Eh, study failed. %s\n",err);
   }
@@ -567,30 +571,30 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
     signed_off(gc);
   }
 
-  if(ask_for_register) {
-    pcre_free(ask_for_register);
-    ask_for_register = NULL;
+  if(g_pats.ask_for_register.pat) {
+    pcre_free(g_pats.ask_for_register.pat);
+    g_pats.ask_for_register.pat = NULL;
   }
-  if(ask_for_register_study) {
-    pcre_free(ask_for_register_study);
-    ask_for_register_study = NULL;
+  if(g_pats.ask_for_register.study) {
+    pcre_free(g_pats.ask_for_register.study);
+    g_pats.ask_for_register.study = NULL;
   }
 
-  if(was_identified) {
-    pcre_free(was_identified);
-    was_identified = NULL;
+  if(g_pats.was_identified.pat) {
+    pcre_free(g_pats.was_identified.pat);
+    g_pats.was_identified.pat = NULL;
   }
-  if(was_identified_study) {
-    pcre_free(was_identified_study);
-    was_identified_study = NULL;
+  if(g_pats.was_identified.study) {
+    pcre_free(g_pats.was_identified.study);
+    g_pats.was_identified.study = NULL;
   }
-  if(use_recover) {
-    pcre_free(use_recover);
-    use_recover = NULL;
+  if(g_pats.use_recover.pat) {
+    pcre_free(g_pats.use_recover.pat);
+    g_pats.use_recover.pat = NULL;
   }
-  if(use_recover_study) {
-    pcre_free(use_recover_study);
-    use_recover_study = NULL;
+  if(g_pats.use_recover.study) {
+    pcre_free(g_pats.use_recover.study);
+    g_pats.use_recover.study = NULL;
   }
   irc_plugin = purple_plugins_find_with_id(IRC_PLUGIN_ID);
   if(irc_plugin) {
