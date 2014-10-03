@@ -2,9 +2,9 @@
 #include <glib.h>
 
 enum pat_mode {
-    plain,
-    pcre,
-    match
+    pat_plain,
+    pat_pcre,
+    pat_match
 };
 
 struct pat;
