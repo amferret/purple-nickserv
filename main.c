@@ -43,7 +43,7 @@ struct pats {
 } g_pats = {};
 
 static void pats_setup(void) {
-  g_pats.ask_for_register = pat_setup("nickname is registered",TRUE);
+  g_pats.ask_for_register = pat_setup("nickname is registered",MATCH);
   g_pats.was_identified = pat_setup("Password accepted|You are now identified",FALSE);
   g_pats.use_recover = pat_setup("Instead, use the RECOVER command",TRUE);
   g_pats.was_ghosted = NULL; // TODO: this
