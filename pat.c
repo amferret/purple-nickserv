@@ -16,6 +16,7 @@ struct pcre_pat {
 struct plain_pat {
     struct pat parent;
     const char* substring;
+    gboolean caseless;
 };
 
 struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
@@ -25,14 +26,14 @@ struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
     if(mode == pat_plain || mode == pat_match) {
         struct plain_pat* self = g_new(struct plain_pat,1);
         self->parent.plain = TRUE;
-        self->substring = pattern; // assuming this is a string literal
         self->caseless = (mode == pat_match) ? TRUE : FALSE;
         if(mode == pat_match) {
             self->caseless = TRUE;
             // needs freeing
-            self->substring = g_ascii_strdown(substring,strlen(substring));
+            self->substring = g_ascii_strdown(pattern,strlen(substring));
         } else {
             self->caseless = FALSE;
+            self->substring = pattern; // assuming this is a string literal
         }
         return (struct pat*)self;
     } else {
@@ -77,7 +78,7 @@ gboolean pat_check(struct pat* parent, const char* test) {
         struct plain_pat* self = (struct plain_pat*) parent;
         if(self->caseless==TRUE) 
             test = g_ascii_strdown(test);
-        gboolean ret = g_strstr_len(test,strlen(test),self->substring) == NULL ? FALSE : TRUE;
+        gboolean ret = g_strstr_len(test,g_strlen(test),self->substring) == NULL ? FALSE : TRUE;
         if(self->caseless==TRUE)
             g_free(test);
         return ret;
