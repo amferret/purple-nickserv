@@ -43,8 +43,18 @@ struct pats {
 } g_pats = {};
 
 static void pats_setup(void) {
+  g_pats.ask_for_register = pat_setup("nickname is registered",TRUE);
+  g_pats.was_identified = pat_setup("Password accepted|You are now identified",FALSE);
+  g_pats.use_recover_instead = pat_setup("Instead, use the RECOVER command",TRUE);
+  g_pats.was_ghosted = NULL; // TODO: this
+  g_pats.was_recovered = NULL; // TODO: this
 }
 static void pats_cleanup(void) {
+  pat_cleanup(&g_pats.ask_for_register);
+  pat_cleanup(&g_pats.was_identified);
+  pat_cleanup(&g_pats.use_recover_instead);
+  pat_cleanup(&g_pats.was_ghosted);
+  pat_cleanup(&g_pats.was_recovered);
 }
 
 static gboolean plugin_load(PurplePlugin *plugin);
@@ -440,9 +450,8 @@ static gboolean plugin_load(PurplePlugin *plugin) {
 
   const char* err = NULL;
   int erroffset = 0;
-  g_pats.ask_for_register = pat_setup("nickname is registered",TRUE);
-  g_pats.was_identified = pat_setup("Password accepted|You are now identified",FALSE);
-  g_pats.use_recover_instead = pat_setup("Instead, use the RECOVER command",TRUE);
+
+  pats_setup();
 
   if (NULL == irc_prpl)
     return FALSE;
@@ -524,31 +533,8 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
     signed_off(gc);
   }
 
-  if(g_pats.ask_for_register.pat) {
-    pcre_free(g_pats.ask_for_register.pat);
-    g_pats.ask_for_register.pat = NULL;
-  }
-  if(g_pats.ask_for_register.study) {
-    pcre_free(g_pats.ask_for_register.study);
-    g_pats.ask_for_register.study = NULL;
-  }
+  pats_cleanup();
 
-  if(g_pats.was_identified.pat) {
-    pcre_free(g_pats.was_identified.pat);
-    g_pats.was_identified.pat = NULL;
-  }
-  if(g_pats.was_identified.study) {
-    pcre_free(g_pats.was_identified.study);
-    g_pats.was_identified.study = NULL;
-  }
-  if(g_pats.use_recover.pat) {
-    pcre_free(g_pats.use_recover.pat);
-    g_pats.use_recover.pat = NULL;
-  }
-  if(g_pats.use_recover.study) {
-    pcre_free(g_pats.use_recover.study);
-    g_pats.use_recover.study = NULL;
-  }
   irc_plugin = purple_plugins_find_with_id(IRC_PLUGIN_ID);
   if(irc_plugin) {
     prpl_info = PURPLE_PLUGIN_PROTOCOL_INFO(irc_plugin);
