@@ -9,8 +9,9 @@ env["ENV"]["PKG_CONFIG_PATH"] = os.environ.get("PKG_CONFIG_PATH")
 
 env.ParseConfig('pkg-config glib-2.0 purple --cflags --libs')
 
-objects = list()
-objects.append(env.SharedObject("main.c"))
+objects = [env.SharedObject(a) for a in (
+        "main.c",
+        "pat.c")]
 
 lib = env.SharedLibrary("purple-nickserv",objects,SHLIBPREFIX="")
 

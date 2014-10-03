@@ -35,24 +35,24 @@
 #define PASSWORD PLUGIN_ID ".password"
 
 struct pats {
-    pat ask_for_register;
-    pat was_identified;
-    pat use_recover;
-    pat was_ghosted;
-    pat was_recovered;
+    struct pat* ask_for_register;
+    struct pat* was_identified;
+    struct pat* use_recover;
+    struct pat* was_ghosted;
+    struct pat* was_recovered;
 } g_pats = {};
 
 static void pats_setup(void) {
   g_pats.ask_for_register = pat_setup("nickname is registered",TRUE);
   g_pats.was_identified = pat_setup("Password accepted|You are now identified",FALSE);
-  g_pats.use_recover_instead = pat_setup("Instead, use the RECOVER command",TRUE);
+  g_pats.use_recover = pat_setup("Instead, use the RECOVER command",TRUE);
   g_pats.was_ghosted = NULL; // TODO: this
   g_pats.was_recovered = NULL; // TODO: this
 }
 static void pats_cleanup(void) {
   pat_cleanup(&g_pats.ask_for_register);
   pat_cleanup(&g_pats.was_identified);
-  pat_cleanup(&g_pats.use_recover_instead);
+  pat_cleanup(&g_pats.use_recover);
   /* TODO: these
   pat_cleanup(&g_pats.was_ghosted);
   pat_cleanup(&g_pats.was_recovered);
