@@ -320,17 +320,16 @@ static void setNick(account_context* ctx) {
 static gboolean check_nick(gpointer udata) {
   PurpleConnection* connection = (PurpleConnection*) udata;
 
-  account_context* ctx = find_context(connection->account);
-
-  // always assign, in case settings changed.
-  ctx->desiredNick = purple_account_get_string(connection->account,
+  const char* desiredNick = purple_account_get_string(connection->account,
 					       DESIRED_NICK,NULL);
 
-  if(ctx->desiredNick==NULL || *ctx->desiredNick=='\0') return FALSE;
+  if(desiredNick==NULL || *desiredNick=='\0') return FALSE;
 
-  if(!strcmp(purple_connection_get_display_name(connection),ctx->desiredNick)) {
+  if(!strcmp(purple_connection_get_display_name(connection),desiredNick)) {
     // we have teh right nick now yay
     account_context* ctx = find_context(connection->account);
+    // always assign, in case settings changed.
+    ctx->desiredNick = desiredNick;
     if(!ctx->identified) {
         const char* password = purple_account_get_string(connection->account,
 						   PASSWORD,NULL);
@@ -352,6 +351,8 @@ static gboolean check_nick(gpointer udata) {
 
   g_assert(connection && connection->account);
   account_context* ctx = check_nick_conv(connection->account);
+  // always assign, in case settings changed.
+  ctx->desiredNick = desiredNick;
   const char* var1434[] = {
       "Ghosting",
       desiredNick,
