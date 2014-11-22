@@ -40,6 +40,7 @@ struct pats {
     struct pat* use_recover;
     struct pat* was_killed;
     struct pat* unused;
+    struct pat* owned;
 } g_pats = {};
 
 static void pats_setup(void) {
@@ -48,6 +49,7 @@ static void pats_setup(void) {
   g_pats.use_recover = pat_setup("Instead, use the RECOVER command",pat_plain);
   g_pats.was_killed = pat_setup("has been killed",pat_plain);
   g_pats.unused = pat_setup("isn't currently in use",pat_plain);
+  g_pats.owned = pat_setup("is owned by someone else",pat_plain);
 }
 static void pats_cleanup(void) {
   pat_cleanup(&g_pats.ask_for_register);
@@ -55,6 +57,7 @@ static void pats_cleanup(void) {
   pat_cleanup(&g_pats.use_recover);
   pat_cleanup(&g_pats.was_killed);
   pat_cleanup(&g_pats.unused);
+  pat_cleanup(&g_pats.owned);
 }
 
 static gboolean plugin_load(PurplePlugin *plugin);
@@ -98,6 +101,7 @@ static PurplePluginInfo info =
 typedef struct account_context_s {
   const char* desiredNick;
   PurpleConvIm* nick_conv;
+  PurpleAccount* account;
   PurpleConversation* nick_conv_thingy;
   guint nick_checker;
   gboolean identified;
@@ -115,12 +119,32 @@ account_context* find_context(PurpleAccount* account) {
   if(!context) {
     context = g_new0(account_context,1);
     context->nick_conv_thingy = NULL;
+    context->account = account;
     g_hash_table_replace(contexts,account,context);
   }
 
   return context;
 }
 
+static void unset_nick_conv(PurpleConversation* conv, void* udata) {
+    account_context* context = (account_context*) udata;
+    context->nick_conv_thingy = NULL;
+    context->nick_conv = NULL;
+}
+
+static void check_nick_conv(account_context* context) {
+    PurpleAccount* account = context->account;
+  if(!context->nick_conv_thingy) {
+    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
+    purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation",
+            g_plugin, PURPLE_CALLBACK(unset_nick_conv), context);
+    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
+    return;
+  }
+  if(!context->nick_conv)
+    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
+  return;
+}
 // why can't I go va_append("nickserv",args)? x_x
 
 static void tell_nickserv(account_context* ctx, PurpleAccount *account, const char** args) {
@@ -131,6 +155,7 @@ static void tell_nickserv(account_context* ctx, PurpleAccount *account, const ch
   if(purple_account_get_bool(account,NICKSERV_USE_PRIVMSG,FALSE)==FALSE) {
     gchar* error = NULL;
     fprintf(stderr,"Trying command %s\n",line);
+    check_nick_conv(ctx);
     if(PURPLE_CMD_STATUS_OK!=purple_cmd_do_command(ctx->nick_conv_thingy,
 					    line,line,&error)) {
       fprintf(stderr,"Nickserv command failed %s",line);
@@ -138,6 +163,7 @@ static void tell_nickserv(account_context* ctx, PurpleAccount *account, const ch
   } else {
     const char* message = line + 9;
     fprintf(stderr,"Trying privmsg %s %d\n",message,strlen(message));
+    check_nick_conv(ctx);
     purple_conv_im_send_with_flags(ctx->nick_conv,
 				   message,
 				   PURPLE_MESSAGE_NO_LOG |
@@ -155,20 +181,10 @@ static void doIdentify(account_context* ctx, PurpleAccount* account, const char*
     tell_nickserv(ctx,account,var1434);
 }
 
-static account_context* check_nick_conv(PurpleAccount* account) {
-  account_context* context = find_context(account);
-  if(!context->nick_conv_thingy) {
-    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
-    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
-    return context;
-  }
-  if(!context->nick_conv)
-    context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
-  return context;
-}
 
 static void tell_user(account_context* ctx, const char** args) {
   gchar* message = g_strjoinv(" ",(gchar**)args);
+  check_nick_conv(ctx);
   purple_conversation_write(ctx->nick_conv_thingy,
 			    "nickserv identifier",
 			    message,
@@ -210,12 +226,12 @@ static gboolean check_for_nickserv(PurpleAccount *account,
   const char* password = purple_account_get_string(account,PASSWORD,NULL);
   if(password==NULL) return TRUE;
 
-  account_context* ctx = check_nick_conv(account);
+  account_context* ctx = find_context(account);
   if(!conv) {
     conv = ctx->nick_conv_thingy;
   } else if(conv != ctx->nick_conv_thingy) return FALSE;
 
-  if(pat_check(g_pats.ask_for_register,*message)) {
+  if(pat_check(g_pats.ask_for_register,*message) || pat_check(g_pats.owned,*message)) {
     const char* var1434[] = {
         "Identifying to nickserv as",
 	    purple_connection_get_display_name(purple_conversation_get_connection(conv)),
@@ -353,7 +369,7 @@ static gboolean check_nick(gpointer udata) {
   if(password==NULL) return FALSE;
 
   g_assert(connection && connection->account);
-  account_context* ctx = check_nick_conv(connection->account);
+  account_context* ctx = find_context(connection->account);
   // always assign, in case settings changed.
   ctx->desiredNick = desiredNick;
   const char* var1434[] = {
