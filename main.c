@@ -44,11 +44,12 @@ struct pats {
 } g_pats = {};
 
 static void pats_setup(void) {
+    // pats_init(); done need-based statically
   g_pats.ask_for_register = pat_setup("nickname is registered",pat_match);
   g_pats.was_identified = pat_setup("Password accepted|You are now identified",pat_pcre);
   g_pats.use_recover = pat_setup("Instead, use the RECOVER command",pat_plain);
   g_pats.was_killed = pat_setup("has been killed",pat_plain);
-  g_pats.unused = pat_setup("isn't currently in use",pat_plain);
+  g_pats.unused = pat_setup("isn't currently in use|is not online.",pat_pcre);
   g_pats.owned = pat_setup("is owned by someone else",pat_plain);
 }
 static void pats_cleanup(void) {
@@ -58,6 +59,7 @@ static void pats_cleanup(void) {
   pat_cleanup(&g_pats.was_killed);
   pat_cleanup(&g_pats.unused);
   pat_cleanup(&g_pats.owned);
+  pats_uninit();
 }
 
 static gboolean plugin_load(PurplePlugin *plugin);
@@ -108,7 +110,7 @@ typedef struct account_context_s {
 } account_context;
 
 PurplePlugin* g_plugin = NULL;
-
+FILE* log = NULL;
 
 /*******************************************************************************************************/
 
@@ -147,9 +149,18 @@ static void check_nick_conv(account_context* context) {
 }
 // why can't I go va_append("nickserv",args)? x_x
 
+inline void dolog(const char who[], const char* message) {
+  fprintf(log,"%d ",time(NULL));
+  fwrite(log,who,sizeof(who));
+  fwrite(log,var1434,strlen(var1434));
+  fputc(log,'\n');
+  fflush(log);
+}
+
 static void tell_nickserv(account_context* ctx, PurpleAccount *account, const char** args) {
 
   gchar* var1434 = g_strjoinv(" ",(gchar**)args);
+  dolog("nickserv ",var1434);
   gchar* line = g_strconcat("nickserv ",var1434,NULL);
   g_free(var1434);
   if(purple_account_get_bool(account,NICKSERV_USE_PRIVMSG,FALSE)==FALSE) {
@@ -184,6 +195,7 @@ static void doIdentify(account_context* ctx, PurpleAccount* account, const char*
 
 static void tell_user(account_context* ctx, const char** args) {
   gchar* message = g_strjoinv(" ",(gchar**)args);
+  dolog("user ",message);
   check_nick_conv(ctx);
   purple_conversation_write(ctx->nick_conv_thingy,
 			    "nickserv identifier",
@@ -469,6 +481,8 @@ static gboolean plugin_load(PurplePlugin *plugin) {
   PurplePluginProtocolInfo *prpl_info;
   void *conn_handle;
 
+  gchar* dest = g_build_filename(purple_user_dir(),"nickserv.log");
+  log = fopen(dest,"at");
   irc_prpl = purple_plugins_find_with_id(IRC_PLUGIN_ID);
 
   pats_setup();
@@ -576,6 +590,9 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
     g_plugin = NULL;
 
   g_hash_table_remove_all(contexts);
+
+  fclose(log);
+  log = NULL;
 
   return TRUE;
 }

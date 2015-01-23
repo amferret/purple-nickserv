@@ -14,3 +14,6 @@ void pat_cleanup(struct pat**);
 
 gboolean pat_check(struct pat*, const char* test);
 
+gboolean pat_capture(struct pat* parent, const char* test, int start, int* ovector, int ovecsize);
+
+void pats_uninit(void);

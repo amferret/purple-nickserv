@@ -3,6 +3,9 @@
 #include <glib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
+
+__thread pcre_jit_stack* stack = NULL;
 
 struct pat {
     enum pat_mode mode;
@@ -19,6 +22,17 @@ struct plain_pat {
     const char* substring;
     gboolean caseless;
 };
+
+static void pats_init(void) {
+    stack = pcre_jit_stack_alloc(0x100,0x80000);
+}
+
+void pats_uninit(void) {
+    if(stack) {
+        pcre_jit_stack_free(stack);
+        stack = NULL;
+    }
+}
 
 struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
     const char* err = NULL;
@@ -39,17 +53,20 @@ struct pat* pat_setup(const char* pattern, enum pat_mode mode) {
         return (struct pat*)self;
     } else {
         struct pcre_pat* self = g_new(struct pcre_pat,1);
+        assert(self);
         self->parent.mode = mode;
         self->pat = pcre_compile(pattern,0,
                 &err,&erroffset,NULL);
         if(!self->pat) {
             fprintf(stderr,"PCRE COMPILE ERROR %s\n",err);
+            abort();
             return NULL;
         }
 
-        self->study = pcre_study(self->pat,0,&err);
+        self->study = pcre_study(self->pat,PCRE_STUDY_JIT_COMPILE,&err);
         if(err) {
             fprintf(stderr,"Eh, study failed. %s\n",err);
+            assert(self->study==NULL);
         }
         return (struct pat*)self;
     }
@@ -68,7 +85,7 @@ void pat_cleanup(struct pat** self) {
         if(pdoom->pat) 
             pcre_free(pdoom->pat);
         if(pdoom->study)
-            pcre_free(pdoom->study);
+            pcre_free_study(pdoom->study);
     }
 
     free(doomed);
@@ -86,18 +103,38 @@ gboolean pat_check(struct pat* parent, const char* test) {
         return ret;
     }
     struct pcre_pat* self = (struct pcre_pat*) parent;
-    int rc = pcre_exec(self->pat,                   /* the compiled pattern */
+    // doing this check just to be safe eh
+    if(!stack) pats_init();
+    int rc = pcre_jit_exec(self->pat,                   /* the compiled pattern */
             self->study,             /* no extra data - we didn't study the pattern */
 		     test,              /* the subject string */
 		     strlen(test),       /* the length of the subject */
 		     0,                    /* start at offset 0 in the subject */
 		     0,                    /* default options */
 		     NULL,              /* output vector for substring information */
-		     0);           /* number of elements in the output vector */
+		     0,           /* number of elements in the output vector */
+             stack); /* jit stack */
 
   if(rc >= 0) {
       return TRUE;
   }
   return FALSE;
+}
+
+gboolean pat_capture(struct pat* parent, const char* test, int start, int* ovector, int ovecsize) {
+    g_assert(parent->mode == pat_pcre);
+    struct pcre_pat* self = (struct pcre_pat*) parent;
+    int rc = pcre_jit_exec(self->pat,
+            self->study,
+            test,
+            strlen(test),
+            start,
+            0,
+            ovector,
+            ovecsize,
+            stack);
+    if (rc >= 0) 
+        return TRUE;
+    return FALSE;
 }
 
