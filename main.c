@@ -48,7 +48,7 @@ static void pats_setup(void) {
   g_pats.ask_for_register = pat_setup("nickname is registered",pat_match);
   g_pats.was_identified = pat_setup("Password accepted|You are now identified",pat_pcre);
   g_pats.use_recover = pat_setup("Instead, use the RECOVER command",pat_plain);
-  g_pats.was_killed = pat_setup("has been killed",pat_plain);
+  g_pats.was_killed = pat_setup("has been (?:killed|ghosted)",pat_pcre);
   g_pats.unused = pat_setup("isn't currently in use|is not online.",pat_pcre);
   g_pats.owned = pat_setup("is owned by someone else",pat_plain);
 }
@@ -110,7 +110,7 @@ typedef struct account_context_s {
 } account_context;
 
 PurplePlugin* g_plugin = NULL;
-FILE* log = NULL;
+FILE* thelog = NULL;
 
 /*******************************************************************************************************/
 
@@ -137,7 +137,10 @@ static void unset_nick_conv(PurpleConversation* conv, void* udata) {
 static void check_nick_conv(account_context* context) {
     PurpleAccount* account = context->account;
   if(!context->nick_conv_thingy) {
-    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,purple_account_get_string(account,NICKSERV_NAME,"NickServ"));
+    const gchar* nickservnick = purple_account_get_string(account,NICKSERV_NAME,"NickServ");
+    fprintf(thelog,"Nickserv nick '%s'",nickservnick);
+    context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,nickservnick);
+							
     purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation",
             g_plugin, PURPLE_CALLBACK(unset_nick_conv), context);
     context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
@@ -150,33 +153,37 @@ static void check_nick_conv(account_context* context) {
 // why can't I go va_append("nickserv",args)? x_x
 
 inline void dolog(const char who[], const char* message) {
-  fprintf(log,"%d ",time(NULL));
-  fwrite(log,who,sizeof(who));
-  fwrite(log,var1434,strlen(var1434));
-  fputc(log,'\n');
-  fflush(log);
+  fprintf(thelog,"%d ",time(NULL));
+  fwrite(who,sizeof(who),1,thelog);
+  fputc(' ',thelog);
+  fwrite(message,strlen(message)-1,1,thelog);
+  fputc('\n',thelog);
+  fflush(thelog);
 }
 
 static void tell_nickserv(account_context* ctx, PurpleAccount *account, const char** args) {
 
-  gchar* var1434 = g_strjoinv(" ",(gchar**)args);
-  dolog("nickserv ",var1434);
-  gchar* line = g_strconcat("nickserv ",var1434,NULL);
-  g_free(var1434);
+  gchar* line = g_strjoinv(" ",(gchar**)args);
+  dolog("nickserv ",line);
   if(purple_account_get_bool(account,NICKSERV_USE_PRIVMSG,FALSE)==FALSE) {
+    gchar* var1434 = line;
+    line = g_strconcat("nickserv ",var1434,NULL);
+    g_free(var1434);
+
     gchar* error = NULL;
-    fprintf(stderr,"Trying command %s\n",line);
+    fprintf(thelog,"Trying command %s\n",line);
     check_nick_conv(ctx);
     if(PURPLE_CMD_STATUS_OK!=purple_cmd_do_command(ctx->nick_conv_thingy,
 					    line,line,&error)) {
       fprintf(stderr,"Nickserv command failed %s",line);
     }
   } else {
-    const char* message = line + 9;
-    fprintf(stderr,"Trying privmsg %s %d\n",message,strlen(message));
+    const char* message = line;
+    fprintf(thelog,"Trying privmsg %s %d\n",message,strlen(message));
     check_nick_conv(ctx);
     purple_conv_im_send_with_flags(ctx->nick_conv,
 				   message,
+				   PURPLE_MESSAGE_RAW |
 				   PURPLE_MESSAGE_NO_LOG |
 				   PURPLE_MESSAGE_INVISIBLE |
 				   PURPLE_MESSAGE_AUTO_RESP);
@@ -218,6 +225,7 @@ static void setNick(account_context* ctx) {
   // then try to change your nickname.
   gchar* command = g_strconcat("nick ",ctx->desiredNick,NULL);
   gchar* error = NULL;
+  check_nick_conv(ctx);
   purple_cmd_do_command(ctx->nick_conv_thingy,command,command,&error);
   g_free(command);
   if(error) {
@@ -239,17 +247,16 @@ static gboolean check_for_nickserv(PurpleAccount *account,
   if(password==NULL) return TRUE;
 
   account_context* ctx = find_context(account);
-  if(!conv) {
-    conv = ctx->nick_conv_thingy;
-  } else if(conv != ctx->nick_conv_thingy) return FALSE;
+  if(conv != ctx->nick_conv_thingy) return FALSE;
+  // if check_nick_conv creates a conversation, it will NEVER be existing conversation conv
 
   if(pat_check(g_pats.ask_for_register,*message) || pat_check(g_pats.owned,*message)) {
+    doIdentify(ctx,account,password);
     const char* var1434[] = {
         "Identifying to nickserv as",
-	    purple_connection_get_display_name(purple_conversation_get_connection(conv)),
+	    purple_connection_get_display_name(purple_conversation_get_connection(ctx->nick_conv_thingy)),
         NULL};
     tell_user(ctx,var1434);
-    doIdentify(ctx,account,password);
     return TRUE;
   }
   if(pat_check(g_pats.was_identified,*message)) {
@@ -482,7 +489,7 @@ static gboolean plugin_load(PurplePlugin *plugin) {
   void *conn_handle;
 
   gchar* dest = g_build_filename(purple_user_dir(),"nickserv.log");
-  log = fopen(dest,"at");
+  thelog = fopen(dest,"at");
   irc_prpl = purple_plugins_find_with_id(IRC_PLUGIN_ID);
 
   pats_setup();
@@ -591,8 +598,8 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
 
   g_hash_table_remove_all(contexts);
 
-  fclose(log);
-  log = NULL;
+  fclose(thelog);
+  thelog = NULL;
 
   return TRUE;
 }
