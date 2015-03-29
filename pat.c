@@ -88,7 +88,7 @@ void pat_cleanup(struct pat** self) {
             pcre_free_study(pdoom->study);
     }
 
-    free(doomed);
+    g_free(doomed);
 }
 
 gboolean pat_check(struct pat* parent, const char* test) {

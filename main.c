@@ -488,7 +488,7 @@ static gboolean plugin_load(PurplePlugin *plugin) {
   PurplePluginProtocolInfo *prpl_info;
   void *conn_handle;
 
-  gchar* dest = g_build_filename(purple_user_dir(),"nickserv.log");
+  gchar* dest = g_build_filename(purple_user_dir(),"nickserv.log",NULL);
   thelog = fopen(dest,"at");
   irc_prpl = purple_plugins_find_with_id(IRC_PLUGIN_ID);
 
@@ -596,7 +596,8 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
   if(g_plugin)
     g_plugin = NULL;
 
-  g_hash_table_remove_all(contexts);
+  //g_hash_table_remove_all(contexts);
+  g_hash_table_unref(contexts); contexts = NULL;
 
   fclose(thelog);
   thelog = NULL;
