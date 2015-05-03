@@ -129,9 +129,14 @@ account_context* find_context(PurpleAccount* account) {
 }
 
 static void unset_nick_conv(PurpleConversation* conv, void* udata) {
-    account_context* context = (account_context*) udata;
+  PurpleAccount* account = (PurpleAccount*) udata;
+  // this context might have been freed if we signed off from this account!
+  // conversations are not deleted on account sign-off!
+  account_context* context = g_hash_table_lookup(contexts,account);
+  if(context) {
     context->nick_conv_thingy = NULL;
     context->nick_conv = NULL;
+  }
 }
 
 static void check_nick_conv(account_context* context) {
@@ -142,7 +147,7 @@ static void check_nick_conv(account_context* context) {
     context->nick_conv_thingy = purple_conversation_new(PURPLE_CONV_TYPE_IM,account,nickservnick);
 							
     purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation",
-            g_plugin, PURPLE_CALLBACK(unset_nick_conv), context);
+            g_plugin, PURPLE_CALLBACK(unset_nick_conv), account);
     context->nick_conv = purple_conversation_get_im_data(context->nick_conv_thingy);
     return;
   }
